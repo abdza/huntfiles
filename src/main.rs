@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use tiberius::numeric::Numeric;
+
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io;
 use walkdir::WalkDir;
-use sqlx::{migrate::MigrateDatabase, FromRow, Row, Sqlite, SqlitePool};
-use tiberius::{numeric::Numeric, time, AuthMethod, Client, ColumnType, Config, Query};
+use sqlx::{migrate::MigrateDatabase, FromRow, Sqlite, SqlitePool};
+use tiberius::{AuthMethod, Client, Config, Query};
 use tokio::net::TcpStream;
 use tokio_util::compat::TokioAsyncWriteCompatExt;
 
@@ -58,7 +59,6 @@ async fn main() -> anyhow::Result<()> {
     config.trust_cert();
     let tcp = TcpStream::connect(config.get_addr()).await?;
     tcp.set_nodelay(true)?;
-    // let mut client = Client::connect(config, tcp).await?;
     let mut client = Client::connect(config, tcp.compat_write()).await?;
 
 
@@ -70,21 +70,32 @@ async fn main() -> anyhow::Result<()> {
         for entry in WalkDir::new(&args[1]).into_iter().filter_map(|e| e.ok()) {
             let filepath = entry.path().to_owned();
             println!("{:#?}", filepath);
-            println!("{:#?}", entry.file_type().is_dir());
             if !entry.file_type().is_dir() {
                 let mut file = File::open(filepath.clone())?;
                 let mut hasher = Sha256::new();
                 let _n = io::copy(&mut file, &mut hasher)?;
                 let hash = hasher.finalize().clone();
                 let hashstr = format!("{:x}", hash);
+                let fpath = filepath.clone().into_os_string().into_string().unwrap().replace("\\","[\\/]").replace("/","[\\/]");
                 println!("hash:{:#?}", hashstr);
-                println!("path:{:#?}",filepath.clone().into_os_string().into_string().unwrap());
-                let fsize = fs::metadata(filepath.clone())?.len() as u8;
+                println!("path:{:#?}", fpath);
+                let fsize = fs::metadata(filepath.clone())?.len() as u16;
                 println!("size:{:#?}",fsize);
-                let result = sqlx::query("INSERT INTO file_data (hash,path,totalsize) VALUES (?,?,?)")
+                let sql_query = "select * from file_link where path like (@P1)";
+                let mut select = Query::new(sql_query);
+                select.bind(fpath.clone());
+                let stream = select.query(&mut client).await?;
+                let row = stream.into_row().await?;
+                let fieldid = match row {
+                    Some(rowvalue) => rowvalue.get(0).unwrap_or(Numeric::new_with_scale(0, 0)).value(),
+                    None => 0
+                } as i32;
+                print!("Row:{:#?}",fieldid);
+                let _result = sqlx::query("INSERT INTO file_data (hash,path,totalsize,indb) VALUES (?,?,?,?)")
                     .bind(hashstr)
-                    .bind(filepath.clone().into_os_string().into_string().unwrap())
+                    .bind(fpath)
                     .bind(fsize)
+                    .bind(fieldid)
                     .execute(&db)
                     .await
                     .unwrap();

@@ -14,3 +14,5 @@ Cargo.lock
 *.pdb
 settings.json
 filehunter.db
+filehunter.db-shm
+filehunter.db-wal
