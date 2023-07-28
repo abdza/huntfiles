@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
                 let _n = io::copy(&mut file, &mut hasher)?;
                 let hash = hasher.finalize().clone();
                 let hashstr = format!("{:x}", hash);
-                let fpath = filepath.clone().into_os_string().into_string().unwrap().replace("\\","[\\/]").replace("/","[\\/]");
+                let fpath = filepath.clone().into_os_string().into_string().unwrap().replace("\\","/").replace("/","[\\/]");
                 println!("hash:{:#?}", hashstr);
                 println!("path:{:#?}", fpath);
                 let fsize = fs::metadata(filepath.clone())?.len() as u16;
