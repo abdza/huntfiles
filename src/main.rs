@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tiberius::numeric::Numeric;
+use filesize::file_real_size;
 
 use std::env;
-use std::fs;
 use std::fs::File;
 use std::io;
 use walkdir::WalkDir;
@@ -76,11 +76,11 @@ async fn main() -> anyhow::Result<()> {
                 let _n = io::copy(&mut file, &mut hasher)?;
                 let hash = hasher.finalize().clone();
                 let hashstr = format!("{:x}", hash);
+                let fsize = file_real_size(filepath.clone()).unwrap() as i32;
+                println!("size:{:#?}",fsize);
                 let fpath = filepath.clone().into_os_string().into_string().unwrap().replace("\\","/").replace("/","[\\/]");
                 println!("hash:{:#?}", hashstr);
                 println!("path:{:#?}", fpath);
-                let fsize = fs::metadata(filepath.clone())?.len() as u16;
-                println!("size:{:#?}",fsize);
                 let sql_query = "select * from file_link where path like (@P1)";
                 let mut select = Query::new(sql_query);
                 select.bind(fpath.clone());
