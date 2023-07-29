@@ -20,6 +20,7 @@ struct FileData {
     totalsize: u64,
     indb: u64,
     path: String,
+    dbpath: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -63,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
 
 
     let db = SqlitePool::connect(DB_URL).await.unwrap();
-    let _result = sqlx::query("CREATE TABLE IF NOT EXISTS file_data (id INTEGER PRIMARY KEY NOT NULL, hash VARCHAR(250), path VARCHAR(250), totalsize INTEGER, indb INTEGER );").execute(&db).await.unwrap();
+    let _result = sqlx::query("CREATE TABLE IF NOT EXISTS file_data (id INTEGER PRIMARY KEY NOT NULL, hash VARCHAR(250), path VARCHAR(250), dbpath VARCHAR(250), totalsize INTEGER, indb INTEGER );").execute(&db).await.unwrap();
 
     let args: Vec<_> = env::args().collect();
     if args.len() > 1 {
@@ -78,22 +79,24 @@ async fn main() -> anyhow::Result<()> {
                 let hashstr = format!("{:x}", hash);
                 let fsize = file_real_size(filepath.clone()).unwrap() as i32;
                 println!("size:{:#?}",fsize);
-                let fpath = filepath.clone().into_os_string().into_string().unwrap().replace("\\","/").replace("/","[\\/]");
+                let fpath = filepath.clone().into_os_string().into_string().unwrap();
+                let dbpath = fpath.replace("\\","/").replace("/","[\\/]");
                 println!("hash:{:#?}", hashstr);
                 println!("path:{:#?}", fpath);
                 let sql_query = "select * from file_link where path like (@P1)";
                 let mut select = Query::new(sql_query);
-                select.bind(fpath.clone());
+                select.bind(dbpath.clone());
                 let stream = select.query(&mut client).await?;
                 let row = stream.into_row().await?;
                 let fieldid = match row {
                     Some(rowvalue) => rowvalue.get(0).unwrap_or(Numeric::new_with_scale(0, 0)).value(),
                     None => 0
                 } as i32;
-                print!("Row:{:#?}",fieldid);
-                let _result = sqlx::query("INSERT INTO file_data (hash,path,totalsize,indb) VALUES (?,?,?,?)")
+                println!("Row:{:#?}",fieldid);
+                let _result = sqlx::query("INSERT INTO file_data (hash,path,dbpath,totalsize,indb) VALUES (?,?,?,?,?)")
                     .bind(hashstr)
                     .bind(fpath)
+                    .bind(dbpath)
                     .bind(fsize)
                     .bind(fieldid)
                     .execute(&db)
